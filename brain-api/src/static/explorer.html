@@ -1,0 +1,69 @@
+<!doctype html>
+<!-- Bibliotecas locais (sem CDN): htmx 2.0.11 (0BSD) e vis-network 10.1.2 standalone (Apache-2.0/MIT). -->
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="htmx-config" content='{"allowEval": false, "includeIndicatorStyles": false}'>
+  <title>Cortex Explorer</title>
+  <link rel="icon" type="image/svg+xml" href="/explorer/static/cortex-mark.svg">
+  <link rel="stylesheet" href="/explorer/static/explorer.css">
+  <script src="/explorer/static/htmx.min.js" defer></script>
+  <script src="/explorer/static/vis-network.min.js" defer></script>
+  <script src="/explorer/static/explorer.js" defer></script>
+</head>
+<body>
+  <header class="topo">
+    <h1><img class="marca" src="/explorer/static/cortex-mark.svg" alt="" width="26" height="26">Cortex <span>Explorer</span></h1>
+    <p id="status" hx-get="/explorer/status" hx-trigger="load">carregando índice…</p>
+  </header>
+
+  <main>
+    <section class="coluna-busca">
+      <form id="busca" hx-get="/explorer/buscar" hx-target="#resultados" hx-trigger="load, submit, input changed delay:300ms"
+            hx-sync="this:replace" hx-indicator="#carregando" role="search">
+        <div class="campo-q">
+          <input id="q" name="q" type="search" autocomplete="off" autofocus
+                 placeholder="Pergunte ao vault… ex.: o que foi decidido sobre o backup" aria-label="Pergunta">
+          <span id="carregando" class="htmx-indicator">buscando…</span>
+        </div>
+        <div class="filtros">
+          <label>Só pastas <input name="pastas" type="text" placeholder="01_Projetos, 03_Reunioes"></label>
+          <label>Excluir <input name="excluir" type="text" placeholder="Excalidraw/ (padrão)"></label>
+          <label>Trechos
+            <select name="limite">
+              <option>5</option><option selected>10</option><option>20</option>
+            </select>
+          </label>
+          <label>FTS
+            <select name="fts" title="Como o lado de palavras-chave casa os termos da pergunta">
+              <option value="">padrão</option>
+              <option value="and">and · todos os termos</option>
+              <option value="or">or · qualquer termo</option>
+              <option value="idf">idf · qualquer termo, peso por raridade</option>
+            </select>
+          </label>
+        </div>
+      </form>
+      <div id="resultados"></div>
+    </section>
+
+    <section class="coluna-lado">
+      <div class="painel-grafo">
+        <div class="painel-cab">
+          <h2>Grafo de [[links]]</h2>
+          <div class="legenda">
+            <span class="l-centro">resultado</span><span class="l-nota">vizinha</span><span class="l-ausente">sem nota</span>
+          </div>
+          <button type="button" id="grafo-resultados" title="Voltar ao grafo de todos os resultados">resultados</button>
+        </div>
+        <div id="grafo"><p class="grafo-vazio">O grafo das notas encontradas aparece aqui.<br>
+          Clique numa nota para lê-la · duplo clique expande as vizinhas.</p></div>
+      </div>
+      <article id="nota" class="painel-nota" aria-live="polite">
+        <p class="vazio">Clique no título de um resultado ou numa nota do grafo para ler a nota inteira.</p>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

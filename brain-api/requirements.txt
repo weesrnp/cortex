@@ -1,0 +1,14 @@
+# Versões testadas: fastapi 0.142, uvicorn 0.54, psycopg 3.3, httpx 0.28, watchdog 6.0, python-frontmatter 1.3,
+# mcp 1.30, pydantic 2.13, pydantic-settings 2.15, pypdf 6.19, PyYAML 6.0, pytest 9.1. Teto na próxima major.
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+psycopg[binary,pool]>=3.2,<4
+httpx>=0.27,<1
+watchdog>=5,<7
+python-frontmatter>=1.1,<2
+mcp>=1.30,<2  # a 2.x quebra o mcp_server.py
+pydantic>=2.8,<3
+pydantic-settings>=2.4,<3
+pypdf>=5,<7
+pyyaml>=6,<7
+pytest>=8.3,<10  # os testes rodam dentro do container (docker compose exec brain-api python -m pytest tests)

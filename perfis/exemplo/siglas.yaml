@@ -1,0 +1,6 @@
+# SIGLA: extenso. A pergunta ganha "(SIGLA: extenso)" no vetor, nos dois sentidos. Sigla casa só em MAIÚSCULAS e
+# palavra inteira. Chaves NO, ON, YES e OFF precisam de aspas ("NO": ...), senão o YAML lê como booleano.
+ADR: "Registro de Decisão de Arquitetura"
+OKR: "Objetivos e Resultados-Chave"
+SLA: "Acordo de Nível de Serviço"
+LGPD: "Lei Geral de Proteção de Dados"

@@ -1,0 +1,39 @@
+# Perfil "exemplo": modelo para criar o perfil da sua área. Copie a pasta (perfis/minha_area), ajuste os arquivos e
+# ponha PERFIL=minha_area no .env. Todos os arquivos e campos são opcionais; o que faltar fica neutro.
+#   perfil.yaml (este) · siglas.yaml · instrucoes.md (pastas e fatos fixos para o MCP) · perguntas.yaml (avaliação)
+# Mudou `metadados`? O índice não percebe sozinho: suba PARSER_VERSION (notas .md) e PDF_PARSER_VERSION (PDFs) em
+# brain-api/src/parser.py para reindexar.
+
+# Nome do servidor MCP (aparece no cliente MCP) e do produto nas mensagens
+nome_mcp: cortex-exemplo
+titulo: Cortex
+
+# 1º parágrafo das instruções que o agente recebe ao conectar: o que é este vault
+descricao: |-
+  Cortex: memória semântica do vault de exemplo (equipe fictícia "Oficina Aurora": projetos,
+  reuniões, decisões e referências internas).
+
+# Passo 1 das instruções: "Antes de responder sobre <dominio>, chame brain_search..."
+dominio: projetos, reuniões, decisões ou rotinas da equipe
+# Passo 5: exemplo de pergunta reformulada com termos técnicos
+exemplo_reformular: '"SLA de resposta do suporte" em vez de "demora para responder cliente"'
+# Regras extras no fim das instruções (as de dados pessoais e de citar a nota são do núcleo)
+regras:
+  - Decisões em 00_Agent_Decisions valem sobre atas de reunião mais antigas.
+
+# Pastas com notas oficiais: o brain_consolidar avisa para não editar nem juntar
+pastas_oficiais: ["02_Referencias"]
+
+# Instrução do modelo de embedding na pergunta (só na consulta). Em inglês, como o Qwen3 recomenda.
+instrucao_embedding: "Given a question about a small team's projects, meetings and decisions, retrieve note passages that answer it"
+
+# Metadados extraídos de cada nota (chave: regex; com grupo, vale o grupo). Aparecem como etiquetas no /explorer.
+metadados:
+  tickets: '\b([A-Z]{2,5}-\d{1,5})\b'
+  datas: '\b(20\d{2}-\d{2}-\d{2})\b'
+
+# Limiares (opcional). Sem esta seção valem os padrões de src/config.py, medidos com qwen3-embedding:4b.
+# Calibre os seus com tests/calibrar_confianca.py depois de escrever as perguntas.yaml.
+# limiares:
+#   auto_link_threshold: 0.70
+#   low_confidence_threshold: 0.62

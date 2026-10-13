@@ -1,0 +1,8 @@
+# Desenvolvimento: código e testes montados por cima da imagem (mudou o código = docker compose restart brain-api).
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# Mudou requirements.txt ou o Dockerfile: acrescente --build.
+services:
+  brain-api:
+    volumes:
+      - ./brain-api/src:/app/src:ro
+      - ./brain-api/tests:/app/tests:ro

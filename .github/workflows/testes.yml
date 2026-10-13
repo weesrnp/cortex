@@ -1,0 +1,40 @@
+name: testes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: cortex
+          POSTGRES_USER: cortex
+          POSTGRES_PASSWORD: cortex
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U cortex -d cortex"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://cortex:cortex@localhost:5432/cortex
+      PERFIL: exemplo
+      PERFIS_PATH: ${{ github.workspace }}/perfis
+      VAULT_PATH: ${{ github.workspace }}/exemplo-vault
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: brain-api/requirements.txt
+      - name: Dependências
+        run: pip install -r brain-api/requirements.txt
+      - name: Schema
+        run: PGPASSWORD=cortex psql -h localhost -U cortex -d cortex -v ON_ERROR_STOP=1 -f db/init.sql
+      - name: "Testes (sem Ollama: os embeddings são simulados)"
+        working-directory: brain-api
+        run: python -m pytest tests -q -p no:cacheprovider

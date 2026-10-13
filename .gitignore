@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# o que o uso cria dentro do cofre de exemplo (notas do brain_store, histórico de versões, config do Obsidian)
+exemplo-vault/.cortex_historico/
+exemplo-vault/.obsidian/
+exemplo-vault/.trash/
