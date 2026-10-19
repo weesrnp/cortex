@@ -1,11 +1,12 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
+from datetime import date
 
 from .database import db
 import time
 
-from .search import HybridSearchEngine, mask_pii, log_search
+from .search import HybridSearchEngine, estado_vigencia, hoje, mask_pii, log_search
 from .embeddings import OllamaEmbeddingClient
 from .config import settings
 from .graph import GraphEngine
@@ -31,6 +32,10 @@ class SearchResponseItem(BaseModel):
     similarity: Optional[float]  # cosseno com a pergunta; abaixo de low_confidence_threshold = vault não cobre
     outlinks: List[str]
     backlinks: List[str]
+    vigencia: Optional[str] = None         # "revogada" (RRF × REVOGADA_PESO) | "futura" | None (vale)
+    revogada_em: Optional[date] = None
+    vigente_desde: Optional[date] = None
+    substituida_por: Optional[str] = None  # stem da nota que vale no lugar
 
 @router.get("/health")
 async def health():
@@ -80,7 +85,7 @@ async def recall_endpoint(title: str):
     async with db.pool.connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute("""
-                SELECT id, file_path, title, updated_at
+                SELECT id, file_path, title, updated_at, vigente_desde, revogada_em, substituida_por
                 FROM notes
                 WHERE title ILIKE %s OR file_path ILIKE %s;
             """, (title, f"%{title}%"))
@@ -88,7 +93,7 @@ async def recall_endpoint(title: str):
             if not note:
                 raise HTTPException(status_code=404, detail="Nota não encontrada.")
 
-            note_id, file_path, clean_title, updated_at = note
+            note_id, file_path, clean_title, updated_at, ini, fim, nova = note
 
             await cur.execute("""
                 SELECT chunk_index, heading_hierarchy, content, metadata
@@ -116,6 +121,10 @@ async def recall_endpoint(title: str):
         "title": clean_title,
         "file_path": file_path,
         "updated_at": updated_at,
+        "vigencia": estado_vigencia(ini, fim, nova, hoje()),  # "revogada" | "futura" | None (vale)
+        "vigente_desde": ini,
+        "revogada_em": fim,
+        "substituida_por": mask_pii(nova),
         "tags": tags,
         "outlinks": outlinks,
         "backlinks": backlinks,

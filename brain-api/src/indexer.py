@@ -223,16 +223,22 @@ class VaultIndexer:
                 async with conn.cursor() as cur:
                     # Upsert da nota mestre
                     await cur.execute("""
-                        INSERT INTO notes (file_path, title, file_hash, ficha_embedding, ficha_hash, updated_at)
-                        VALUES (%s, %s, %s, %s, %s, NOW())
+                        INSERT INTO notes (file_path, title, file_hash, ficha_embedding, ficha_hash,
+                                           vigente_desde, revogada_em, substituida_por, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
                         ON CONFLICT (file_path) DO UPDATE SET
                             title = EXCLUDED.title,
                             file_hash = EXCLUDED.file_hash,
                             ficha_embedding = EXCLUDED.ficha_embedding,
                             ficha_hash = EXCLUDED.ficha_hash,
+                            vigente_desde = EXCLUDED.vigente_desde,
+                            revogada_em = EXCLUDED.revogada_em,
+                            substituida_por = EXCLUDED.substituida_por,
                             updated_at = NOW()
                         RETURNING id;
-                    """, (parsed.file_path, parsed.title, parsed.file_hash, str(ficha_vetor), hash_ficha(ficha)))
+                    """, (parsed.file_path, parsed.title, parsed.file_hash, str(ficha_vetor), hash_ficha(ficha),
+                          parsed.vigencia.get("vigente_desde"), parsed.vigencia.get("revogada_em"),
+                          parsed.vigencia.get("substituida_por")))
                     note_id = (await cur.fetchone())[0]
 
                     # Remove chunks e links anteriores para recriação limpa

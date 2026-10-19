@@ -1,5 +1,7 @@
 import logging
 import re
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from psycopg.types.json import Jsonb
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
@@ -28,6 +30,37 @@ def cap_per_note(rows, limit: int, per_note_max: int = MAX_CHUNKS_PER_NOTE) -> l
         if seen[r[1]] <= per_note_max:
             out.append(r)
     return out[:limit]
+
+SQL_VIGENCIA = "SELECT id, vigente_desde, revogada_em, substituida_por FROM notes WHERE id = ANY(%s);"
+
+
+def hoje() -> date:
+    """Data de hoje no fuso de FUSO (o container roda em UTC: às 21h de Brasília já seria amanhã)."""
+    return datetime.now(ZoneInfo(settings.fuso)).date() if settings.fuso else date.today()
+
+
+def estado_vigencia(vigente_desde: Optional[date], revogada_em: Optional[date], substituida_por: Optional[str],
+                    hoje: date) -> Optional[str]:
+    """"revogada" (revogada_em já passou, ou substituida_por sem data), "futura" (vigente_desde depois de hoje) ou
+    None (vale). Revogação marcada para o futuro ainda vale."""
+    if (revogada_em is not None and revogada_em <= hoje) or (revogada_em is None and substituida_por):
+        return "revogada"
+    if vigente_desde is not None and vigente_desde > hoje:
+        return "futura"
+    return None
+
+
+def aplicar_vigencia(rows, vigencias: Dict[int, tuple], peso: float, hoje: date) -> list:
+    """Multiplica o RRF (r[9]) dos trechos de nota revogada por `peso` e reordena (sort estável: empate mantém a
+    ordem do SQL). vigencias = {note_id: (vigente_desde, revogada_em, substituida_por)}. Roda antes do cap_per_note,
+    para a vaga da revogada ir para outra nota. peso 1 = só avisa, não mexe na ordem."""
+    if peso == 1 or not vigencias:
+        return list(rows)
+    def score(r):
+        v = vigencias.get(r[1])
+        return float(r[9]) * (peso if v and estado_vigencia(*v, hoje) == "revogada" else 1)
+    return [(*r[:9], s, *r[10:]) for s, r in sorted(((score(r), r) for r in rows), key=lambda x: -x[0])]
+
 
 def note_stem(file_path: str) -> str:
     """Nome do arquivo sem pasta e sem .md: é o alvo de [[link]] no Obsidian (igual a notes.stem no banco)."""
@@ -58,6 +91,10 @@ class SearchResult:
     backlinks: List[str]
     similarity: Optional[float] = None  # cosseno pergunta x trecho (1 - distância); o rrf_score só ordena
     note_rank: Optional[int] = None     # posição da nota na via de fichas; None = fora das 25
+    vigencia: Optional[str] = None      # "revogada" | "futura" | None (vale): estado_vigencia
+    revogada_em: Optional[date] = None
+    vigente_desde: Optional[date] = None
+    substituida_por: Optional[str] = None  # stem da nota que vale no lugar ([[link]])
 
 def max_similarity(results: List[SearchResult]) -> Optional[float]:
     sims = [r.similarity for r in results if r.similarity is not None]
@@ -125,10 +162,15 @@ class HybridSearchEngine:
                     FROM cortex_hybrid_search(%s, %s, %s, %s, %s, %s, %s, %s, %s);
                 """, (query, str(query_vector), limit * 3, RRF_K, folder_prefix,
                       include_folders or None, exclude_folders or None, fts_mode, note_weight))
-                rows = cap_per_note(await cur.fetchall(), limit)
-
+                rows = await cur.fetchall()
                 if not rows:
                     return []
+
+                # Vigência (frontmatter): nota revogada cai no placar e deixa a vaga para outra antes do corte por nota
+                await cur.execute(SQL_VIGENCIA, (list({r[1] for r in rows}),))
+                vigencias = {nid: (ini, fim, nova) for nid, ini, fim, nova in await cur.fetchall()}
+                dia = hoje()
+                rows = cap_per_note(aplicar_vigencia(rows, vigencias, settings.revogada_peso, dia), limit)
 
                 results = []
                 note_ids = [r[1] for r in rows]
@@ -164,6 +206,7 @@ class HybridSearchEngine:
                         backlinks_map[target].append(src_title)
 
                 for r in rows:
+                    ini, fim, nova = vigencias.get(r[1], (None, None, None))
                     results.append(SearchResult(
                         chunk_id=r[0],
                         note_id=r[1],
@@ -179,6 +222,8 @@ class HybridSearchEngine:
                         backlinks=backlinks_map.get(note_stem(r[2]), []),
                         similarity=sims.get(r[0]),
                         note_rank=r[10],
+                        vigencia=estado_vigencia(ini, fim, nova, dia),
+                        revogada_em=fim, vigente_desde=ini, substituida_por=mask_pii(nova),
                     ))
 
                 return results

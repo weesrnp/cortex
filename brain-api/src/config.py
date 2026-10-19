@@ -1,4 +1,6 @@
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .perfil import aplicar_limiares, carregar_perfil
@@ -15,6 +17,8 @@ class Settings(BaseSettings):
     embedding_num_ctx: int = 2048  # chunks ~700 tokens; 4096+ transborda uma GPU de 6 GB para a CPU
     note_weight: float = 1.0  # peso da via de fichas no RRF; 0 desliga. Mudar = medir com tests/avaliar_busca.py
     fts_mode: FtsMode = "and"  # lado léxico; trocar só se tests/avaliar_busca.py medir melhor
+    revogada_peso: float = Field(0.5, ge=0, le=1)  # RRF de nota revogada (frontmatter revogada_em) × peso; 1 só avisa
+    fuso: str = ""  # fuso do "hoje" da vigência (ex.: America/Sao_Paulo); vazio = relógio do container (UTC no Docker)
     low_confidence_threshold: float = 0.62  # maior cosseno abaixo = "vault provavelmente não tem"; perfil pode trocar
     expand_siglas: bool = True  # pergunta ganha "SIGLA: extenso" no vetor (siglas.py); medir com EXPAND_SIGLAS=false
     index_pdf: bool = True  # PDFs do vault entram no índice (parse_pdf); medir com tests/avaliar_busca.py
@@ -29,6 +33,16 @@ class Settings(BaseSettings):
     log_level: str = "info"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @field_validator("fuso")
+    @classmethod
+    def _fuso_existe(cls, v: str) -> str:
+        if v:  # FUSO errado para a subida, em vez de derrubar cada busca com ZoneInfoNotFoundError
+            try:
+                ZoneInfo(v)
+            except (ZoneInfoNotFoundError, ValueError) as e:
+                raise ValueError(f"FUSO desconhecido: {v!r} (ex.: America/Sao_Paulo)") from e
+        return v
 
 settings = Settings()
 perfil = carregar_perfil(settings.perfil, settings.perfis_path)

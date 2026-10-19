@@ -1,12 +1,16 @@
 import io
+import logging
 import re
 import hashlib
+from datetime import date, datetime
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
 import frontmatter
 
 from .config import perfil
+
+logger = logging.getLogger("cortex.parser")
 
 @dataclass
 class NoteChunk:
@@ -24,6 +28,8 @@ class ParsedNote:
     tags: List[str]
     links: List[str]
     chunks: List[NoteChunk]
+    # vigente_desde / revogada_em (date) e substituida_por (stem da nota nova) vindos do frontmatter; ausente = None
+    vigencia: Dict[str, Any] = field(default_factory=dict)
 
     def ficha(self) -> str:
         return texto_ficha(self.title, self.file_path, [(c.heading_hierarchy, c.content) for c in self.chunks])
@@ -31,7 +37,8 @@ class ParsedNote:
 # Entra no file_hash: mudar a divisão em trechos → subir a versão, e o próximo scan reindexa o vault sozinho
 # (o indexador reaproveita o vetor de todo trecho com texto igual). v5 = v1 + PREAMBULO + CERCAS, medidas uma a uma
 # na busca; títulos pais (v2) e corte de parágrafo gigante pioraram a busca.
-PARSER_VERSION = "6"  # 6: links sem a barra de tabela e sem os de código (trechos iguais ao v5: vetores reaproveitados)
+PARSER_VERSION = "7"  # 7: vigência do frontmatter em notes; 6: links sem a barra de tabela e sem os de código
+                      # (trechos iguais ao v5 nos dois: vetores reaproveitados, a reindexação só regrava as notas)
 PDF_PARSER_VERSION = "1"  # entra no file_hash dos PDFs (parse_pdf): mudar o corte em trechos → subir
 
 
@@ -77,6 +84,45 @@ class VaultParser:
     def _meta(cls, body: str) -> Dict[str, Any]:
         """Metadados globais da nota (vão em todos os trechos): uma lista por regex de `metadados` no perfil."""
         return {chave: list(set(rx.findall(body))) for chave, rx in perfil.metadados.items()}
+
+    @staticmethod
+    def _data(valor) -> Optional[date]:
+        """date do YAML (2026-01-01), datetime, texto ISO (2026-01-01, 2026-01-01T10:00) ou dd/mm/aaaa; senão None."""
+        if isinstance(valor, datetime):
+            return valor.date()
+        if isinstance(valor, date):
+            return valor
+        texto = str(valor).strip()
+        for formato, tamanho in (("%Y-%m-%d", 10), ("%d/%m/%Y", 10)):
+            try:
+                return datetime.strptime(texto[:tamanho], formato).date()
+            except ValueError:
+                pass
+        return None
+
+    @classmethod
+    def _vigencia(cls, fm_data: Dict[str, Any], rel_path: str = "") -> Dict[str, Any]:
+        """Vigência da nota pelo frontmatter (chaves em perfil.vigencia). substituida_por aceita "[[Nota]]",
+        "[[Pasta/Nota#Seção|apelido]]", [[Nota]] sem aspas (o YAML lê lista de lista) ou lista (vale a primeira) e
+        vira o stem. Data que não se entende anula a vigência inteira da nota (na dúvida, a nota vale) e vai para o
+        log: sem isso, "revogada_em: 31/13/2026" + substituida_por revogaria a nota hoje."""
+        def primeiro(campo):
+            return next((fm_data[k] for k in perfil.vigencia[campo] if fm_data.get(k) not in (None, "")), None)
+
+        nova = primeiro("substituida_por")
+        while isinstance(nova, list):
+            nova = nova[0] if nova else None
+        if nova is not None:
+            nova = str(nova).strip().removeprefix("[[").removesuffix("]]").split("|", 1)[0].split("#", 1)[0]
+            nova = nova.rstrip("/").rsplit("/", 1)[-1].removesuffix(".md").strip() or None
+        vig = {"vigente_desde": primeiro("vigente_desde"), "revogada_em": primeiro("revogada_em")}
+        for campo, valor in vig.items():
+            if valor is not None:
+                vig[campo] = cls._data(valor)
+                if vig[campo] is None:
+                    logger.warning("vigência ignorada em %s: %s=%r não é data (use AAAA-MM-DD)", rel_path, campo, valor)
+                    return {"vigente_desde": None, "revogada_em": None, "substituida_por": None}
+        return {**vig, "substituida_por": nova}
 
     @classmethod
     def parse_pdf(cls, path: Path, base_vault_path: Path, max_paginas: int = 300) -> Optional["ParsedNote"]:
@@ -186,7 +232,8 @@ class VaultParser:
             file_hash=file_hash,
             tags=list(tags),
             links=list(links),
-            chunks=chunks
+            chunks=chunks,
+            vigencia=cls._vigencia(fm_data, rel_path),
         )
 
     @classmethod

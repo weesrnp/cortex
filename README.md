@@ -127,7 +127,7 @@ arquivos são opcionais:
 
 | Arquivo | Para quê |
 |---|---|
-| `perfil.yaml` | Nome do servidor MCP e título, descrição do cofre, domínio, exemplo de pergunta, regras extras, instrução do modelo de embedding, regex de metadados (viram etiquetas no explorer), pastas oficiais e limiares |
+| `perfil.yaml` | Nome do servidor MCP e título, descrição do cofre, domínio, exemplo de pergunta, regras extras, instrução do modelo de embedding, regex de metadados (viram etiquetas no explorer), pastas oficiais, limiares e chaves de vigência do frontmatter |
 | `siglas.yaml` | Glossário. A pergunta ganha "(SIGLA: extenso)" no fim antes de virar vetor, nos dois sentidos |
 | `instrucoes.md` | Texto que entra nas instruções do MCP: mapa das pastas, fatos fixos |
 | `perguntas.yaml` | Perguntas de avaliação (`principais`, `conferencia`, `pdfs`) e perguntas que o cofre não responde (`fora`) |
@@ -203,6 +203,12 @@ cofre (.md e .pdf) ──► parser (trechos por cabeçalho, ficha da nota, meta
   perde resultado como o índice HNSW, que é aproximado.
 - PDFs entram como notas, com o número da página no trecho. Ficam de fora PDFs com mais de 300 páginas, os sem texto
   (digitalizados), as cópias com texto igual (fica uma) e os de caminho que casa com `PDF_EXCLUDE_PATTERN`.
+- Nota que não vale mais continua no cofre e no índice. Com `revogada_em: 2026-03-15` (ou só `substituida_por`) no
+  frontmatter, a busca multiplica o RRF dela por `REVOGADA_PESO`, e o MCP, a API e o explorer avisam que ela foi
+  revogada e qual nota vale (`substituida_por: "[[Nota nova]]"`). Com `vigente_desde` no futuro, o aviso diz desde
+  quando ela vale, sem rebaixar. As chaves em inglês também valem (`revoked_at`, `superseded_by`, `valid_from`), e o
+  `perfil.yaml` pode trocar os nomes (`vigencia:`). A nota é
+  lida de novo quando o arquivo muda, então basta editar o frontmatter.
 - As buscas pela API e pelo MCP vão para `search_log`, com a pergunta já mascarada. É a base do `brain_consolidar` e do
   `avaliar_feedback.py`. O log e o feedback não vêm do cofre: apagar o volume do banco apaga os dois.
 
@@ -223,6 +229,8 @@ As variáveis ficam no `.env` (veja `.env.example`) e chegam ao Cortex pelo comp
 | `PDF_EXCLUDE_PATTERN` | `(?i)confidencial\|sigiloso\|nominal` | Regex do caminho de PDF que fica fora do índice |
 | `EXPAND_SIGLAS` | `true` | Expansão de siglas na pergunta |
 | `LOW_CONFIDENCE_THRESHOLD` / `AUTO_LINK_THRESHOLD` | 0,62 / 0,70 | Limiares (o perfil também define; a variável vence) |
+| `REVOGADA_PESO` | 0,5 | Multiplica o RRF de nota revogada (0 a 1); 1 só avisa, sem mudar a ordem |
+| `FUSO` | vazio (UTC no Docker) | Fuso do "hoje" da vigência, ex.: `America/Sao_Paulo` |
 
 A senha do Postgres vale quando o volume é criado. Para trocar depois, use `ALTER USER` no banco ou apague o volume.
 

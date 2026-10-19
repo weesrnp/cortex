@@ -154,6 +154,11 @@ $$;
 -- trechos dela).
 ALTER TABLE notes ADD COLUMN IF NOT EXISTS ficha_embedding VECTOR(1024);  -- NULL até o indexador gerar
 ALTER TABLE notes ADD COLUMN IF NOT EXISTS ficha_hash CHAR(32);           -- md5 do texto da ficha: mudou → refaz
+-- Vigência pelo frontmatter (parser.py: _vigencia). Revogada = revogada_em <= hoje, ou substituida_por sem data:
+-- a busca multiplica o RRF por REVOGADA_PESO (search.py: aplicar_vigencia) e avisa qual nota vale. NULL = vigente.
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS vigente_desde DATE;
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS revogada_em DATE;
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS substituida_por TEXT;           -- stem da nota que vale no lugar
 
 CREATE OR REPLACE FUNCTION cortex_hybrid_search(
     query_text TEXT,

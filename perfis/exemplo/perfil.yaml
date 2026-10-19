@@ -1,7 +1,7 @@
 # Perfil "exemplo": modelo para criar o perfil da sua área. Copie a pasta (perfis/minha_area), ajuste os arquivos e
 # ponha PERFIL=minha_area no .env. Todos os arquivos e campos são opcionais; o que faltar fica neutro.
 #   perfil.yaml (este) · siglas.yaml · instrucoes.md (pastas e fatos fixos para o MCP) · perguntas.yaml (avaliação)
-# Mudou `metadados`? O índice não percebe sozinho: suba PARSER_VERSION (notas .md) e PDF_PARSER_VERSION (PDFs) em
+# Mudou `metadados` ou `vigencia`? O índice não percebe sozinho: suba PARSER_VERSION (notas .md) e PDF_PARSER_VERSION (PDFs) em
 # brain-api/src/parser.py para reindexar.
 
 # Nome do servidor MCP (aparece no cliente MCP) e do produto nas mensagens
@@ -31,6 +31,14 @@ instrucao_embedding: "Given a question about a small team's projects, meetings a
 metadados:
   tickets: '\b([A-Z]{2,5}-\d{1,5})\b'
   datas: '\b(20\d{2}-\d{2}-\d{2})\b'
+
+# Vigência (opcional): chaves do frontmatter que dizem se a nota ainda vale. Sem esta seção valem as de
+# src/perfil.py (VIGENCIA_PADRAO): vigente_desde/valid_from, revogada_em/revoked_at, substituida_por/superseded_by.
+# Cada campo aceita uma chave ou uma lista; a primeira presente na nota vence. Mudou depois de indexar? Suba
+# PARSER_VERSION, como nos metadados (os vetores são reaproveitados; só as notas são regravadas).
+# vigencia:
+#   revogada_em: [revogada_em, data_revogacao]
+#   substituida_por: substituida_por
 
 # Limiares (opcional). Sem esta seção valem os padrões de src/config.py, medidos com qwen3-embedding:4b.
 # Calibre os seus com tests/calibrar_confianca.py depois de escrever as perguntas.yaml.

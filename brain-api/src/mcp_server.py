@@ -13,7 +13,8 @@ import time
 import zlib
 
 from .database import db
-from .search import HybridSearchEngine, mask_pii, is_low_confidence, max_similarity, log_search
+from .search import (HybridSearchEngine, SQL_VIGENCIA, estado_vigencia, hoje, mask_pii, is_low_confidence,
+                     max_similarity, log_search)
 from .embeddings import OllamaEmbeddingClient
 from .config import perfil, settings
 from .graph import GraphEngine
@@ -39,6 +40,8 @@ COMO USAR (fluxo recomendado)
    brain_graph(title="A", target_title="B") para o menor caminho lógico entre dois tópicos.
 4. Cada trecho traz "sim" (similaridade 0-1 com a pergunta). Veio "⚠ BAIXA CONFIANÇA"? O vault provavelmente não
    tem o assunto: não invente a partir dos trechos; reformule uma vez ou diga que o vault não cobre.
+   Veio "⚠ REVOGADA"? A nota não vale mais (a busca já a rebaixa): responda pela nota de "Vale [[...]]".
+   Para revogar uma nota, ponha no frontmatter dela revogada_em: AAAA-MM-DD e substituida_por: "[[Nota nova]]".
 5. Resultado ruim? Reformule com termos técnicos{exemplo}
    ou restrinja com include_folders.
 6. Antes de propor uma abordagem técnica, veja se já foi decidida:
@@ -115,6 +118,7 @@ async def brain_search(
         sim = f" · sim {r.similarity:.2f}" if r.similarity is not None else ""
         output.append(
             f"### [{r.rrf_score:.3f}{sim}] {r.title}\n"
+            f"{_aviso_vigencia(r.vigencia, r.vigente_desde, r.revogada_em, r.substituida_por)}"
             f"Seção: {r.heading_hierarchy} | Arquivo: {r.file_path}{meta_str}\n\n"
             f"{r.content}\n"
             f"{links_str}"
@@ -129,6 +133,17 @@ async def brain_search(
 
 
 MAX_SEARCH_LIMIT = 15
+
+
+def _aviso_vigencia(estado, vigente_desde, revogada_em, substituida_por) -> str:
+    """Linha de aviso (com quebra) para nota revogada ou ainda não vigente; "" quando a nota vale."""
+    nova = f" Vale [[{mask_pii(substituida_por)}]]: leia com brain_recall." if substituida_por else ""
+    if estado == "revogada":
+        quando = f" em {revogada_em.isoformat()}" if revogada_em else ""
+        return f"⚠ REVOGADA{quando}: não use como regra atual.{nova}\n"
+    if estado == "futura":
+        return f"⚠ AINDA NÃO VIGENTE: vale a partir de {vigente_desde.isoformat()}.\n"
+    return ""
 
 
 @mcp.tool(annotations=REGISTRO)
@@ -206,6 +221,9 @@ async def brain_recall(title: str) -> str:
             note_id, file_path, clean_title = rows[0]
             await cur.execute("SELECT content FROM chunks WHERE note_id = %s ORDER BY chunk_index ASC;", (note_id,))
             chunks = [r[0] for r in await cur.fetchall()]
+            await cur.execute(SQL_VIGENCIA, ([note_id],))
+            _, ini, fim, nova = await cur.fetchone() or (None, None, None, None)  # nota saiu no meio da leitura
+            aviso = _aviso_vigencia(estado_vigencia(ini, fim, nova, hoje()), ini, fim, nova)
 
             # Outlinks
             await cur.execute("SELECT target_title FROM note_links WHERE source_note_id = %s;", (note_id,))
@@ -230,6 +248,7 @@ async def brain_recall(title: str) -> str:
 
     return (
         f"# {clean_title} (Arquivo: {file_path})\n\n"
+        f"{aviso + chr(10) if aviso else ''}"
         f"**Conexões Diretas no Grafo:**\n{conexoes_str}\n"
         f"*(Para explorar a vizinhança de 2º grau e nós pontes: `brain_graph('{clean_title}')`)*\n\n"
         f"{_cortar_recall(mask_pii(chr(10).join(chunks)), clean_title)}"

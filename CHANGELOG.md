@@ -3,6 +3,15 @@
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e as versões seguem
 [SemVer](https://semver.org/lang/pt-BR/). Versão com mudança de schema avisa aqui: rode a seção "Atualizar" do README.
 
+## [Não lançado]
+
+Muda o schema: rode a seção "Atualizar" do README (três colunas novas em `notes`).
+
+- Vigência das notas pelo frontmatter: `vigente_desde`, `revogada_em` e `substituida_por` (ou `valid_from`,
+  `revoked_at`, `superseded_by`; o perfil troca as chaves em `vigencia:`). Nota revogada fica no índice, com o RRF
+  multiplicado por `REVOGADA_PESO` (0,5), e o MCP, a API e o explorer avisam qual nota vale. `FUSO` define o "hoje".
+- `PARSER_VERSION` 7: a primeira subida relê as notas para preencher a vigência (vetores reaproveitados).
+
 ## [0.1.0] - 2026-10-12
 
 Primeira versão pública.

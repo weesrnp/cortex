@@ -130,7 +130,7 @@ The code in `brain-api/src` is the same for any subject. Everything specific to 
 
 | File | Purpose |
 |---|---|
-| `perfil.yaml` | MCP server name and title, vault description, domain, sample query, extra rules, embedding instruction, metadata regexes (shown as tags in the explorer), official folders and thresholds |
+| `perfil.yaml` | MCP server name and title, vault description, domain, sample query, extra rules, embedding instruction, metadata regexes (shown as tags in the explorer), official folders, thresholds and frontmatter validity keys |
 | `siglas.yaml` | Acronym glossary. The question gets "(ACRONYM: expansion)" appended before embedding, both ways |
 | `instrucoes.md` | Text added to the MCP instructions: folder map, fixed facts |
 | `perguntas.yaml` | Evaluation questions (`principais`, `conferencia`, `pdfs`) and questions the vault cannot answer (`fora`) |
@@ -206,6 +206,12 @@ vault (.md and .pdf) ──► parser (chunks by heading, note card, profile met
   not miss results the way the approximate HNSW index can.
 - PDFs become notes, with page numbers in each chunk. Left out: PDFs over 300 pages, PDFs without text (scans),
   duplicate copies (one is kept) and paths matching `PDF_EXCLUDE_PATTERN`.
+- A note that no longer applies stays in the vault and in the index. With `revogada_em: 2026-03-15` (or just
+  `substituida_por`) in the frontmatter, search multiplies its RRF by `REVOGADA_PESO`, and the MCP, API and explorer
+  say it was revoked and which note applies (`substituida_por: "[[New note]]"`). With `vigente_desde` in the future,
+  the warning says when it starts to apply, without demoting it. English keys also work (`revoked_at`,
+  `superseded_by`, `valid_from`), and the profile can rename them (`vigencia:` in `perfil.yaml`). The note is read
+  again when the file changes, so editing the frontmatter is enough.
 - Searches through the API and MCP go to `search_log`, with the question masked. This feeds `brain_consolidar` and
   `avaliar_feedback.py`. The log and feedback do not come from the vault: deleting the database volume deletes them.
 
@@ -226,6 +232,8 @@ Variables live in `.env` (see `.env.example`) and reach Cortex through compose. 
 | `PDF_EXCLUDE_PATTERN` | `(?i)confidencial\|sigiloso\|nominal` | Regex for PDF paths left out of the index |
 | `EXPAND_SIGLAS` | `true` | Acronym expansion in the question |
 | `LOW_CONFIDENCE_THRESHOLD` / `AUTO_LINK_THRESHOLD` | 0.62 / 0.70 | Thresholds (the profile sets them too; the variable wins) |
+| `REVOGADA_PESO` | 0.5 | Multiplies the RRF of a revoked note (0 to 1); 1 only warns, without changing the order |
+| `FUSO` | empty (UTC in Docker) | Time zone for "today" in validity checks, e.g. `America/Sao_Paulo` |
 
 The Postgres password applies when the volume is created. To change it later, use `ALTER USER` or delete the volume.
 

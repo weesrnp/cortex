@@ -309,6 +309,11 @@ def render_resultados(query: str, resultados: List[SearchResult], scores: Dict[i
         fic = (f'<b>#{r.note_rank}</b><small>nota inteira</small>' if r.note_rank
                else f'<b>—</b><small>fora das {TOP_FICHAS}</small>')
         secao = f" › {_txt(r.heading_hierarchy)}" if r.heading_hierarchy else ""
+        if r.vigencia == "revogada":  # o RRF mostrado já vem × REVOGADA_PESO (search.py: aplicar_vigencia)
+            nova = f" · vale {_txt(r.substituida_por)}" if r.substituida_por else ""
+            secao += f" · <b>revogada</b> (RRF × {settings.revogada_peso:g}){nova}"
+        elif r.vigencia == "futura":
+            secao += f" · <b>vigente a partir de {r.vigente_desde.isoformat()}</b>"
         cards.append(f"""
 <article class="res" data-nota="{r.note_id}">
   <header>
