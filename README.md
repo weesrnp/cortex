@@ -26,7 +26,8 @@ O Cortex liga as duas pontas.
 - **Usa o cofre que você já tem.** Notas, PDFs e `[[links]]` viram um índice de busca. O cofre continua sendo a fonte
   da verdade: o índice se reconstrói a partir dele a qualquer momento.
 - **Tudo fica na sua máquina.** Vetores pelo Ollama local, banco em Docker, portas só em 127.0.0.1, explorer sem
-  nada carregado de fora e números de documento pessoais mascarados nas respostas. Serve para cofres que você nunca
+  nada carregado de fora e números de documento pessoais mascarados nas respostas e no que os agentes gravam (CPF e
+  CNS com dígito verificador válido). Serve para cofres que você nunca
   mandaria para a nuvem.
 - **Busca que se mede.** Vetor, palavras e uma ficha por nota, fundidos por RRF e expandidos pelo grafo de links. Cada
   mudança na busca passa por perguntas de avaliação antes de entrar.

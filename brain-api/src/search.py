@@ -3,14 +3,15 @@ import re
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 from psycopg.types.json import Jsonb
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 from .config import settings
 from .embeddings import OllamaEmbeddingClient
 
 logger = logging.getLogger("cortex.search")
 
-# LGPD: o vault guarda o dado bruto; toda saída (REST e MCP) passa por mask_pii.
+# LGPD: toda saída (REST e MCP) passa por mask_pii; o que os agentes gravam passa por mascarar_gravacao. Nota escrita
+# à mão no Obsidian pode ter o dado bruto: por isso a saída continua mascarando tudo.
 _RE_CNS = re.compile(r'(?<!\d)([12789]\d{2}) ?\d{4} ?\d{4} ?(\d{4})(?!\d)')     # 15 dígitos
 _RE_CPF_FMT = re.compile(r'(?<!\d)(\d{3})\.\d{3}\.\d{3}-(\d{2})(?!\d)')        # 000.000.000-00
 _RE_CPF_RAW = re.compile(r'(?<!\d)(\d{3})\d{6}(\d{2})(?!\d)')                  # 11 dígitos (CPF ou celular)
@@ -74,6 +75,51 @@ def mask_pii(text: str) -> str:
     text = _RE_CNS.sub(r'\1 **** **** \2', text)
     text = _RE_CPF_FMT.sub(r'\1.***.***-\2', text)
     return _RE_CPF_RAW.sub(r'\1.***.***-\2', text)
+
+def _cpf_valido(digitos: str) -> bool:
+    """Dígitos verificadores do CPF (módulo 11). 000.000.000-00 e repetidos não contam."""
+    if len(digitos) != 11 or len(set(digitos)) == 1:
+        return False
+    for n in (9, 10):
+        resto = sum(int(d) * p for d, p in zip(digitos[:n], range(n + 1, 1, -1))) * 10 % 11
+        if resto % 10 != int(digitos[n]):
+            return False
+    return True
+
+
+def _cns_valido(digitos: str) -> bool:
+    """CNS definitivo (1, 2) ou provisório (7, 8, 9): soma dos dígitos × pesos 15..1 divisível por 11."""
+    return (len(digitos) == 15 and digitos[0] in "12789"
+            and sum(int(d) * p for d, p in zip(digitos, range(15, 0, -1))) % 11 == 0)
+
+
+# Gravação aceita qualquer separador entre os blocos (123.456.789/09, 123 456 789 09, CNS com ponto ou hífen).
+_SEP = r"[.\s/-]?"
+_RE_CNS_GRAVA = re.compile(rf"(?<!\d)([12789]\d{{2}}){_SEP}\d{{4}}{_SEP}\d{{4}}{_SEP}(\d{{4}})(?!\d)")
+_RE_CPF_GRAVA = re.compile(rf"(?<!\d)(\d{{3}}){_SEP}\d{{3}}{_SEP}\d{{3}}{_SEP}(\d{{2}})(?!\d)")
+
+
+def mascarar_gravacao(text: str) -> Tuple[str, int]:
+    """Máscara para o que vai PARA o vault (brain_store, brain_record_decision): só CPF e CNS com dígito
+    verificador válido, para não estragar telefone, protocolo ou código de 11 e 15 dígitos (o mask_pii, de saída,
+    mascara qualquer sequência; ainda assim ~1 em 11 protocolos de 15 dígitos e ~1 em 100 celulares passam no
+    dígito e são mascarados). "x" em vez de "*": no Obsidian, "529.***.***-25" vira itálico e aparece "529..-25".
+    Devolve o texto e quantos documentos foram mascarados."""
+    if not text:
+        return text, 0
+    n = 0
+
+    def troca(m, valido, mascara):
+        nonlocal n
+        if not valido(re.sub(r"\D", "", m.group(0))):
+            return m.group(0)
+        n += 1
+        return m.expand(mascara)
+
+    text = _RE_CNS_GRAVA.sub(lambda m: troca(m, _cns_valido, r"\1 xxxx xxxx \2"), text)
+    text = _RE_CPF_GRAVA.sub(lambda m: troca(m, _cpf_valido, r"\1.xxx.xxx-\2"), text)
+    return text, n
+
 
 @dataclass
 class SearchResult:

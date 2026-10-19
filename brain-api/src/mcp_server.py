@@ -13,8 +13,8 @@ import time
 import zlib
 
 from .database import db
-from .search import (HybridSearchEngine, SQL_VIGENCIA, estado_vigencia, hoje, mask_pii, is_low_confidence,
-                     max_similarity, log_search)
+from .search import (HybridSearchEngine, SQL_VIGENCIA, estado_vigencia, hoje, mask_pii, mascarar_gravacao,
+                     is_low_confidence, max_similarity, log_search)
 from .embeddings import OllamaEmbeddingClient
 from .config import perfil, settings
 from .graph import GraphEngine
@@ -388,7 +388,8 @@ async def brain_store(title: str, content: str, folder: str = "00_Inbox", auto_l
     Grava uma nota Markdown no vault (fica pesquisável em ~10 s). Use para conhecimento durável e não óbvio.
     title: título da nota (vira o nome do arquivo; mesmo título sobrescreve, e a versão anterior vai para o
     histórico: brain_historico).
-    content: Markdown; use [[Título de outra nota]] para ligar notas. Nunca grave dado pessoal (documento, telefone) por extenso.
+    content: Markdown; use [[Título de outra nota]] para ligar notas. Nunca grave dado pessoal (documento, telefone) por extenso:
+    CPF e CNS válidos são mascarados antes de gravar (a resposta diz quantos).
     folder: pasta relativa ao vault (padrão "00_Inbox"; ex.: "02_Referencias").
     auto_link: anexa "## Conexões Sugeridas" com [[links]] para as notas mais parecidas.
     fonte: de onde veio a informação (documento, nota, URL, sessão); vai para o frontmatter com a data de hoje.
@@ -513,7 +514,13 @@ _RE_BAD_FILENAME = re.compile(r'[\\/:*?"<>|\x00-\x1f]')  # proibidos no Windows/
 
 
 async def _write_note(title: str, content: str, folder: str, auto_link: bool = True) -> str:
-    """Grava nota .md dentro do vault; recusa pasta que escape dele; anexa links sugeridos."""
+    """Grava nota .md dentro do vault; recusa pasta que escape dele; anexa links sugeridos. CPF e CNS válidos no
+    título ou no texto são mascarados antes (dado nominal não entra no vault, só a explicação)."""
+    if mascarar_gravacao(title)[1]:  # o nome do arquivo com a máscara juntaria pacientes diferentes num arquivo só
+        return "Erro: nada gravado, o título tem CPF ou CNS. Use um título sem documento (o texto pode citar o caso)."
+    content, n_texto = mascarar_gravacao(content)
+    mascara_msg = (f" {n_texto} CPF/CNS mascarado(s) antes de gravar: o vault não guarda dado nominal."
+                   if n_texto else "")
     vault_base = Path(settings.vault_path).resolve()
     target_dir = (vault_base / folder).resolve()
     if not target_dir.is_relative_to(vault_base):
@@ -535,12 +542,12 @@ async def _write_note(title: str, content: str, folder: str, auto_link: bool = T
     if target.exists():
         anterior = target.read_text(encoding="utf-8", errors="replace")
         if anterior == content:
-            return f"Memória '{clean_title}' já estava gravada com este conteúdo (nada mudou)."
-        guardada = _guardar_versao(vault_base, target, anterior)
+            return f"Memória '{clean_title}' já estava gravada com este conteúdo (nada mudou).{mascara_msg}"
+        guardada = _guardar_versao(vault_base, target, mascarar_gravacao(anterior)[0])  # histórico também no vault
         versao_msg = f" Versão anterior guardada em '{guardada}' (brain_historico('{clean_title}'))."
     target.write_text(content, encoding="utf-8")
     return (f"Memória '{clean_title}' gravada com sucesso em '{folder}/{clean_title}.md'."
-            f"{links_msg}{versao_msg} Sincronização automática em andamento.")
+            f"{links_msg}{versao_msg}{mascara_msg} Sincronização automática em andamento.")
 
 
 HISTORICO_DIR = ".cortex_historico"  # pasta com ponto: o indexador e o Obsidian ignoram (não vira nota nem resultado)

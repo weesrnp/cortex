@@ -29,7 +29,8 @@ Cortex connects the two.
 - **Uses the vault you already have.** Notes, PDFs and `[[links]]` become a search index. The vault stays the source
   of truth: the index can be rebuilt from it at any time.
 - **Everything stays on your machine.** Embeddings from local Ollama, database in Docker, ports on 127.0.0.1 only,
-  nothing loaded from outside in the explorer, and personal ID numbers masked in responses. Fine for vaults you would
+  nothing loaded from outside in the explorer, and personal ID numbers masked in responses and in what agents write
+  (Brazilian CPF and CNS with a valid check digit). Fine for vaults you would
   never send to a cloud service.
 - **Search you can measure.** Vectors, keywords and a per-note summary card, fused by RRF and expanded through the link
   graph. Every search change goes through evaluation questions before it lands.

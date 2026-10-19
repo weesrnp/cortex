@@ -11,6 +11,8 @@ Muda o schema: rode a seção "Atualizar" do README (três colunas novas em `not
   `revoked_at`, `superseded_by`; o perfil troca as chaves em `vigencia:`). Nota revogada fica no índice, com o RRF
   multiplicado por `REVOGADA_PESO` (0,5), e o MCP, a API e o explorer avisam qual nota vale. `FUSO` define o "hoje".
 - `PARSER_VERSION` 7: a primeira subida relê as notas para preencher a vigência (vetores reaproveitados).
+- `brain_store` e `brain_record_decision` mascaram CPF e CNS com dígito verificador válido no título e no texto antes
+  de gravar, e dizem quantos mascararam. Telefone, protocolo e código com o mesmo número de dígitos ficam como estão.
 
 ## [0.1.0] - 2026-10-12
 
