@@ -34,6 +34,7 @@ class Perfil:
     siglas: Dict[str, str] = field(default_factory=dict)
     metadados: Dict[str, Pattern] = field(default_factory=dict)
     limiares: Dict[str, float] = field(default_factory=dict)
+    decisao: dict = field(default_factory=dict)
     vigencia: Dict[str, List[str]] = field(default_factory=lambda: {k: list(v) for k, v in VIGENCIA_PADRAO.items()})
 
     def perguntas(self, conjunto: str) -> List[Tuple[str, object]]:
@@ -77,6 +78,7 @@ def carregar_perfil(nome: str, base: str) -> Perfil:
         metadados={k: re.compile(v) for k, v in (cfg.get("metadados") or {}).items()},
         instrucoes_extras=instrucoes.read_text(encoding="utf-8").strip() if instrucoes.is_file() else "",
         limiares={k: float(v) for k, v in (cfg.get("limiares") or {}).items()},
+        decisao=cfg.get("decisao") or {},
     )
     for campo in ("nome_mcp", "titulo", "descricao", "dominio", "exemplo_reformular", "instrucao_embedding"):
         if cfg.get(campo):
@@ -97,3 +99,13 @@ def aplicar_limiares(perfil: Perfil, settings) -> None:
             raise ValueError(f"limiar desconhecido no perfil '{perfil.nome}': {chave}")
         if chave not in settings.model_fields_set:  # valida como a variável de ambiente (ex.: revogada_peso entre 0 e 1)
             type(settings).__pydantic_validator__.validate_assignment(settings, chave, valor)
+
+
+def aplicar_decisao(perfil: Perfil, settings) -> None:
+    """O perfil escolhe n e enunciado; configuração explícita no ambiente tem precedência."""
+    for chave, valor in perfil.decisao.items():
+        if chave not in ("n", "enunciado"):
+            raise ValueError(f"decisao do perfil '{perfil.nome}': campo desconhecido {chave}")
+        campo = f"decisao_{chave}"
+        if campo not in settings.model_fields_set:
+            type(settings).__pydantic_validator__.validate_assignment(settings, campo, valor)

@@ -233,6 +233,17 @@ As variáveis ficam no `.env` (veja `.env.example`) e chegam ao Cortex pelo comp
 | `REVOGADA_PESO` | 0,5 | Multiplica o RRF de nota revogada (0 a 1); 1 só avisa, sem mudar a ordem |
 | `FUSO` | vazio (UTC no Docker) | Fuso do "hoje" da vigência, ex.: `America/Sao_Paulo` |
 
+### Reranque opcional
+
+O reranque fica desligado por padrão. Para ativá-lo, configure `DECISAO_ATIVA=true` e disponibilize no processo a
+chave da variável indicada por `DECISAO_CHAVE_ENV` (padrão `TYPESAFE_API_KEY`). `DECISAO_URL` (padrão
+`https://api.typesafe.ai/v1/systemone`) e `DECISAO_MODELO` (padrão `jev-1.13.0`) escolhem o serviço;
+`DECISAO_N` (20), `DECISAO_TIMEOUT_S` (3) e `DECISAO_ENUNCIADO` controlam candidatos, prazo e instrução.
+O perfil pode definir `decisao: {n: 20, enunciado: "..."}`; variáveis explícitas têm precedência. Para usar
+no container, as variáveis precisam estar disponíveis ao processo da API. Trechos e pergunta são enviados ao serviço
+configurado. Se faltar chave ou o serviço falhar, a busca mantém a ordem habitual; o estado fica em `search_log.filtros`.
+Com a opção ligada, a confiança usa o maior cosseno entre os candidatos recuperados antes do reranque.
+
 A senha do Postgres vale quando o volume é criado. Para trocar depois, use `ALTER USER` no banco ou apague o volume.
 
 Trocar de modelo de embedding não reindexa sozinho: apague o volume do banco (`docker compose down -v`, que também

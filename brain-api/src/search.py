@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
@@ -7,6 +8,7 @@ from typing import List, Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 from .config import settings
 from .embeddings import OllamaEmbeddingClient
+from .decisao import reranquear
 
 logger = logging.getLogger("cortex.search")
 
@@ -143,6 +145,8 @@ class SearchResult:
     substituida_por: Optional[str] = None  # stem da nota que vale no lugar ([[link]])
 
 def max_similarity(results: List[SearchResult]) -> Optional[float]:
+    if hasattr(results, "confianca_sim"):
+        return results.confianca_sim
     sims = [r.similarity for r in results if r.similarity is not None]
     return max(sims) if sims else None
 
@@ -163,7 +167,8 @@ async def log_search(db_pool, origem: str, query: str, filtros: Dict[str, Any],
             cur = await conn.execute(
                 "INSERT INTO search_log (origem, query, filtros, resultados, max_similarity, baixa_confianca, duracao_ms) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
-                (origem, mask_pii(query), Jsonb({k: v for k, v in filtros.items() if v}),
+                (origem, mask_pii(query), Jsonb({**{k: v for k, v in filtros.items() if v},
+                                                **({"decisao": results.decisao} if hasattr(results, "decisao") else {})}),
                  Jsonb([{"file_path": r.file_path, "similarity": r.similarity, "rrf_score": r.rrf_score}
                         for r in results]),
                  max_similarity(results), is_low_confidence(results), duracao_ms))
@@ -172,12 +177,51 @@ async def log_search(db_pool, origem: str, query: str, filtros: Dict[str, Any],
         logger.exception("search_log: gravação falhou (busca segue)")
         return None
 
+class ResultadosBusca(list):
+    """Metadados por busca, sem adicionar campos à resposta REST nem compartilhar estado entre requisições."""
+    def __init__(self, resultados, confianca_sim, decisao):
+        super().__init__(resultados)
+        self.confianca_sim = confianca_sim
+        self.decisao = decisao
+
+
 class HybridSearchEngine:
     def __init__(self, db_pool, embed_client: OllamaEmbeddingClient):
         self.db_pool = db_pool
         self.embed_client = embed_client
 
     async def search(
+        self,
+        query: str,
+        limit: int = 5,
+        folder_prefix: Optional[str] = None,
+        expand_graph: bool = True,
+        include_folders: Optional[List[str]] = None,
+        exclude_folders: Optional[List[str]] = None,
+        query_vector: Optional[List[float]] = None,
+        fts_mode: Optional[str] = None,
+        note_weight: Optional[float] = None,
+    ) -> List[SearchResult]:
+        chave = os.environ.get(settings.decisao_chave_env, "") if settings.decisao_ativa else ""
+        n = max(limit, settings.decisao_n) if chave else limit
+        candidatos = await self._search_atual(query, n, folder_prefix, expand_graph, include_folders,
+                                              exclude_folders, query_vector, fts_mode, note_weight)
+        if not settings.decisao_ativa:
+            return candidatos
+        confianca = max_similarity(candidatos)
+        if not chave:
+            return ResultadosBusca(candidatos, confianca, "reserva:sem_chave")
+        # A API de escolha aceita até 255 opções; limites maiores ainda preservam todos os resultados restantes.
+        escolhidos, estado = await reranquear(query, candidatos[:settings.decisao_n], url=settings.decisao_url,
+                                              modelo=settings.decisao_modelo, chave=chave,
+                                              enunciado=settings.decisao_enunciado,
+                                              timeout_s=settings.decisao_timeout_s)
+        ordenados = escolhidos + candidatos[settings.decisao_n:]
+        if estado == "ok":
+            ordenados = sorted(ordenados, key=lambda r: r.vigencia == "revogada")
+        return ResultadosBusca(ordenados[:limit], confianca, estado)
+
+    async def _search_atual(
         self,
         query: str,
         limit: int = 5,

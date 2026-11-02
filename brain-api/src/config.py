@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .perfil import aplicar_limiares, carregar_perfil
+from .perfil import aplicar_decisao, aplicar_limiares, carregar_perfil
 
 FtsMode = Literal["and", "or", "idf"]
 
@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     pdf_max_pages: int = 300  # PDF maior fica fora (manual de equipamento com milhares de páginas)
     pdf_exclude_pattern: str = r"(?i)confidencial|sigiloso|nominal"  # caminho de PDF que fica fora (dado pessoal); "" = nenhum
     search_log_enabled: bool = True  # tabela search_log: buscas de agentes e REST, pergunta mascarada
+    decisao_ativa: bool = False
+    decisao_url: str = "https://api.typesafe.ai/v1/systemone"
+    decisao_modelo: str = "jev-1.13.0"
+    decisao_chave_env: str = "TYPESAFE_API_KEY"
+    decisao_n: int = Field(20, ge=1, le=255)
+    decisao_timeout_s: float = Field(3.0, gt=0)
+    decisao_enunciado: str = "Which passage best answers the user's question?"
     vault_path: str = "/vault"
     perfil: str = ""  # pasta em perfis_path com siglas, instruções, metadados e limiares da área (src/perfil.py)
     perfis_path: str = "/app/perfis"
@@ -47,3 +54,4 @@ class Settings(BaseSettings):
 settings = Settings()
 perfil = carregar_perfil(settings.perfil, settings.perfis_path)
 aplicar_limiares(perfil, settings)
+aplicar_decisao(perfil, settings)
