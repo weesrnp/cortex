@@ -250,6 +250,7 @@ def test_perfil_e_precedencia_de_ambiente(tmp_path, monkeypatch):
     (pasta / 'perfil.yaml').write_text('decisao:\n  n: 7\n  enunciado: "pergunta?"\n', encoding='utf-8')
     perfil = carregar_perfil('x', str(tmp_path))
     monkeypatch.setenv('DECISAO_N', '9')
+    monkeypatch.delenv('DECISAO_ATIVA', raising=False)  # o compose pode ligar a opção no ambiente do container
     config = Settings(_env_file=None)
     aplicar_decisao(perfil, config)
     assert config.decisao_n == 9 and config.decisao_enunciado == 'pergunta?'
